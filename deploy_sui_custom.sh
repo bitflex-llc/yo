@@ -2,6 +2,14 @@
 
 # Sui Custom Network Deployment Orchestrator
 # This master script coordinates the entire deployment process
+# NOTE: This script requires bash, not just sh
+
+# Check if we're running with bash
+if [ -z "$BASH_VERSION" ]; then
+    echo "Error: This script requires bash, not sh"
+    echo "Please run with: bash deploy_sui_custom.sh"
+    exit 1
+fi
 
 set -e
 
@@ -46,16 +54,15 @@ check_prerequisites() {
     print_status "Checking prerequisites..."
     
     # Check if we're in the Sui repository
-    if [[ ! -f "Cargo.toml" ]] || [[ ! -d "crates" ]]; then
+    if [ ! -f "Cargo.toml" ] || [ ! -d "crates" ]; then
         print_error "This script must be run from the root of the Sui repository"
         print_error "Current directory: $(pwd)"
         exit 1
     fi
     
     # Check for required scripts
-    local required_scripts=("install_sui_server.sh" "create_genesis.sh" "setup_block_explorer.sh")
-    for script in "${required_scripts[@]}"; do
-        if [[ ! -f "$script" ]]; then
+    for script in install_sui_server.sh create_genesis.sh setup_block_explorer.sh; do
+        if [ ! -f "$script" ]; then
             print_error "Required script not found: $script"
             exit 1
         fi
@@ -129,10 +136,10 @@ confirm_deployment() {
     
     read -p "Do you want to proceed with the deployment? (y/N): " -n 1 -r
     echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_status "Deployment cancelled by user"
-        exit 0
-    fi
+    case "$REPLY" in
+        [Yy]* ) ;;
+        * ) print_status "Deployment cancelled by user"; exit 0;;
+    esac
 }
 
 run_genesis_creation() {
@@ -172,20 +179,23 @@ verify_deployment() {
     print_status "Verifying deployment..."
     
     # Check if services are running
-    local services=("sui-fullnode" "sui-validator" "sui-faucet" "sui-explorer")
-    local failed_services=()
+    failed_services=""
     
     sleep 10  # Give services time to start
     
-    for service in "${services[@]}"; do
+    for service in sui-fullnode sui-validator sui-faucet sui-explorer; do
         if ! systemctl is-active --quiet "$service"; then
-            failed_services+=("$service")
+            if [ -z "$failed_services" ]; then
+                failed_services="$service"
+            else
+                failed_services="$failed_services $service"
+            fi
         fi
     done
     
-    if [[ ${#failed_services[@]} -gt 0 ]]; then
+    if [ -n "$failed_services" ]; then
         print_warning "Some services are not running:"
-        for service in "${failed_services[@]}"; do
+        for service in $failed_services; do
             echo "  ❌ $service"
             systemctl status "$service" --no-pager -l || true
         done
@@ -197,13 +207,7 @@ verify_deployment() {
     # Test network connectivity
     print_status "Testing network endpoints..."
     
-    local endpoints=(
-        "http://localhost:9000"
-        "http://localhost:5003"
-        "http://localhost:3000"
-    )
-    
-    for endpoint in "${endpoints[@]}"; do
+    for endpoint in "http://localhost:9000" "http://localhost:5003" "http://localhost:3000"; do
         if curl -s --connect-timeout 5 "$endpoint" >/dev/null 2>&1; then
             print_success "✓ $endpoint is accessible"
         else
