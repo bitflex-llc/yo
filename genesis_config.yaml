@@ -1,0 +1,154 @@
+# Custom Sui Genesis Configuration
+# Modified payout distribution: 1% delegators, 1.5% validators
+
+# Protocol configuration
+protocol_version: 1
+chain_start_timestamp_ms: 1752450361000
+epoch_duration_ms: 86400000
+
+# Network parameters
+parameters:
+  # Staking parameters
+  min_validator_count: 1
+  max_validator_count: 150
+  min_validator_joining_stake: 30000000000000  # 30,000 SUI
+  validator_low_stake_threshold: 20000000000000  # 20,000 SUI
+  validator_very_low_stake_threshold: 15000000000000  # 15,000 SUI
+  validator_low_stake_grace_period: 7  # epochs
+  
+  # Modified staking reward parameters for custom payout distribution
+  stake_subsidy_start_epoch: 0
+  stake_subsidy_initial_distribution_amount: 1000000000000000000  # Large initial subsidy pool
+  stake_subsidy_period_length: 30  # 30 epochs
+  stake_subsidy_decrease_rate: 1000  # 10% decrease per period
+  
+  # Gas configuration
+  max_gas_budget: 50000000  # 0.05 SUI
+  gas_price_for_validator: 1000
+  
+  # Storage configuration
+  storage_gas_price: 76
+  storage_rebate_rate: 9900  # 99%
+  reward_slashing_rate: 10000  # 100% slashing for bad validators
+  
+  # Commission and reward rates
+  max_validator_commission_rate: 2000  # 20% max commission
+  
+# Pre-funded accounts (including our 1M SUI pre-mine)
+accounts:
+  # Main pre-mined account with 1,000,000 SUI
+  - address: ""
+    gas_objects:
+      - object_id: "165f346367a6dc543a0e459d54d34ded"
+        version: 1
+        digest: "a829117ee7124015cc827e3477f20cdf"
+        owner: ""
+        balance: 1000000000000000
+    
+  # Additional utility accounts
+  - address: ""
+    gas_objects:
+      - object_id: "760fbf32b194e1912c6053d2da029a3f"
+        version: 1
+        digest: "d5a1f7acc47158c0a147503705329187"
+        owner: ""
+        balance: 100000000000000  # 100,000 SUI for faucet
+        
+  - address: ""
+    gas_objects:
+      - object_id: "e08baae33cc32c9bfffb1eeee99d838f"
+        version: 1
+        digest: "9ba61f64646a9c441b22cf4ef1e53ec7"
+        owner: ""
+        balance: 500000000000000  # 500,000 SUI for treasury
+
+# Validator configuration
+validators:
+  - name: "Genesis Validator"
+    description: "Initial validator with custom payout distribution"
+    image_url: "https://example.com/validator.png"
+    project_url: "https://example.com"
+    
+    # Network addresses (will be updated with actual addresses)
+    network_address: "/ip4/127.0.0.1/tcp/8080"
+    p2p_address: "/ip4/127.0.0.1/tcp/8084"
+    primary_address: "/ip4/127.0.0.1/tcp/8081"
+    worker_address: "/ip4/127.0.0.1/tcp/8082"
+    
+    # Validator keys (will be generated)
+    account_address: "PLACEHOLDER_VALIDATOR_ADDRESS"
+    protocol_key: "PLACEHOLDER_PROTOCOL_KEY"
+    worker_key: "PLACEHOLDER_WORKER_KEY"
+    network_key: "PLACEHOLDER_NETWORK_KEY"
+    proof_of_possession: "PLACEHOLDER_POP"
+    
+    # Staking configuration
+    gas_price: 1000
+    commission_rate: 1000  # 10% commission
+    
+    # Initial stake for the validator
+    next_epoch_stake: 100000000000000
+
+# Move framework packages
+move_packages:
+  - name: "MoveStdlib"
+    path: "crates/sui-framework/packages/move-stdlib"
+  - name: "SuiFramework" 
+    path: "crates/sui-framework/packages/sui-framework"
+  - name: "SuiSystem"
+    path: "crates/sui-framework/packages/sui-system"
+
+# Features and capabilities
+feature_flags:
+  - "advance_epoch_start_time_in_safe_mode"
+  - "loaded_child_objects_fixed"
+  - "missing_type_is_compatibility_error"
+  - "scoring_decision_with_validity_cutoff"
+  - "narwhal_versioned_metadata"
+  - "consensus_order_end_of_epoch_last"
+  - "disallow_adding_abilities_on_upgrade"
+  - "disable_invariant_violation_check_in_swap_loc"
+  - "advance_to_highest_supported_protocol_version"
+  - "ban_entry_init"
+  - "package_digest_hash_module"
+  - "disallow_change_struct_type_params_on_upgrade"
+  - "no_extraneous_module_bytes"
+  - "consensus_transaction_ordering"
+  - "zklogin_auth"
+  - "consensus_distributed_vote_scoring_strategy"
+  - "fresh_vm_on_framework_upgrade"
+  - "prepend_prologue_tx_in_consensus_commit_in_checkpoints"
+  - "hardened_otw_check"
+  - "allow_receiving_object_id"
+  - "enable_jwk_consensus_updates"
+  - "end_of_epoch_transaction_supported"
+  - "simple_conservation_checks"
+  - "loaded_child_object_format"
+  - "receive_objects"
+  - "random_beacon"
+  - "bridge"
+  - "enable_effects_v2"
+  - "narwhal_new_leader_election_schedule"
+  - "mysticeti"
+  - "reshare_at_same_initial_version"
+  - "resolve_abort_locations_to_package_id"
+  - "relocate_event_module"
+  - "zklogin_supported_providers"
+  - "rethrow_serialization_type_layout_errors"
+  - "accept_zklogin_in_multisig"
+  - "include_consensus_digest_in_prologue"
+  - "hardened_struct_constructors"
+  - "allow_binary_format_version_six"
+  - "enable_coin_deny_list"
+  - "enable_group_ops_native_functions"
+  - "reject_mutable_random_on_entry_functions"
+  - "per_object_congestion_control_mode"
+  - "simplified_unwrap_then_delete"
+  - "upgraded_multisig_supported"
+  - "consensus_choice_modifications"
+  - "congestion_control_pilot_knobs"
+  - "enable_vdf"
+  - "passkey_auth"
+  - "authority_capabilities_v2"
+  - "zklogin_max_epoch_upper_bound_delta"
+
