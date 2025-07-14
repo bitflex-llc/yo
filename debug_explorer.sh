@@ -128,22 +128,22 @@ test_explorer() {
     export PORT=$EXPLORER_PORT
     
     # Try to start explorer
-    echo "🚀 Attempting to start explorer..."
+    echo "🚀 Attempting to start explorer with pnpm..."
     
-    npm run start > /tmp/explorer_test.log 2>&1 &
+    pnpm run start > /tmp/explorer_test.log 2>&1 &
     EXPLORER_PID=$!
     
     # Check if the process is running
     sleep 2
     if kill -0 $EXPLORER_PID 2>/dev/null; then
-        echo "✅ Explorer started with npm start (PID: $EXPLORER_PID)"
+        echo "✅ Explorer started with pnpm start (PID: $EXPLORER_PID)"
     else
-        echo "⚠️  npm start failed, trying dev mode..."
-        npm run dev > /tmp/explorer_test.log 2>&1 &
+        echo "⚠️  pnpm start failed, trying dev mode..."
+        pnpm run dev > /tmp/explorer_test.log 2>&1 &
         EXPLORER_PID=$!
         sleep 2
         if kill -0 $EXPLORER_PID 2>/dev/null; then
-            echo "✅ Explorer started with npm dev (PID: $EXPLORER_PID)"
+            echo "✅ Explorer started with pnpm dev (PID: $EXPLORER_PID)"
         else
             echo "❌ Failed to start explorer"
             return 1

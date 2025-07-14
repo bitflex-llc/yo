@@ -101,7 +101,7 @@ fi
 echo ""
 echo "🚀 QUICK ACTIONS"
 echo "----------------"
-echo "Start Explorer:     cd $EXPLORER_DIR/apps/explorer && PORT=$EXPLORER_PORT npm start"
+echo "Start Explorer:     cd $EXPLORER_DIR/apps/explorer && PORT=$EXPLORER_PORT pnpm start"
 echo "Kill Port Process:  lsof -ti:$EXPLORER_PORT | xargs kill -9"
 echo "View Logs:          tail -f /tmp/explorer_test.log"
 echo "Test Connection:    curl -I http://localhost:$EXPLORER_PORT"

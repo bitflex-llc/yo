@@ -39,6 +39,8 @@ kill_port 3011
 
 # Additional cleanup
 echo "🧹 Additional cleanup..."
+pkill -f "pnpm.*start" 2>/dev/null || true
+pkill -f "pnpm.*dev" 2>/dev/null || true
 pkill -f "npm.*start" 2>/dev/null || true
 pkill -f "npm.*dev" 2>/dev/null || true
 pkill -f "sui-explorer" 2>/dev/null || true
@@ -83,23 +85,37 @@ EOF
     export PORT=3011
     
     if [ -f "package.json" ]; then
-        echo "📦 Starting with npm..."
+        echo "📦 Starting with pnpm (workspace support)..."
         
         # Try different start methods
-        if command -v npm > /dev/null; then
-            if npm run start > /tmp/explorer.log 2>&1 &; then
+        if command -v pnpm > /dev/null; then
+            if pnpm run start > /tmp/explorer.log 2>&1 &; then
                 EXPLORER_PID=$!
-                echo "✅ Explorer started with npm start (PID: $EXPLORER_PID)"
-            elif npm run dev > /tmp/explorer.log 2>&1 &; then
+                echo "✅ Explorer started with pnpm start (PID: $EXPLORER_PID)"
+            elif pnpm run dev > /tmp/explorer.log 2>&1 &; then
                 EXPLORER_PID=$!
-                echo "✅ Explorer started with npm dev (PID: $EXPLORER_PID)"
+                echo "✅ Explorer started with pnpm dev (PID: $EXPLORER_PID)"
             else
-                echo "❌ Failed to start with npm"
+                echo "❌ Failed to start with pnpm"
                 exit 1
             fi
         else
-            echo "❌ npm not found"
-            exit 1
+            echo "❌ pnpm not found, trying npm fallback..."
+            if command -v npm > /dev/null; then
+                if npm run start > /tmp/explorer.log 2>&1 &; then
+                    EXPLORER_PID=$!
+                    echo "✅ Explorer started with npm start (PID: $EXPLORER_PID)"
+                elif npm run dev > /tmp/explorer.log 2>&1 &; then
+                    EXPLORER_PID=$!
+                    echo "✅ Explorer started with npm dev (PID: $EXPLORER_PID)"
+                else
+                    echo "❌ Failed to start with npm"
+                    exit 1
+                fi
+            else
+                echo "❌ Neither pnpm nor npm found"
+                exit 1
+            fi
         fi
         
         echo "⏳ Waiting 15 seconds for startup..."

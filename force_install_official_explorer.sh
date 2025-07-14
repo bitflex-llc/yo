@@ -55,9 +55,30 @@ install_git() {
     fi
 }
 
+# Install pnpm (required for Sui Explorer workspace dependencies)
+install_pnpm() {
+    if command -v pnpm >/dev/null 2>&1; then
+        echo "✅ pnpm already installed"
+        echo "pnpm version: $(pnpm --version)"
+        return 0
+    fi
+    
+    echo "📦 Installing pnpm (required for workspace dependencies)..."
+    npm install -g pnpm
+    
+    if command -v pnpm >/dev/null 2>&1; then
+        echo "✅ pnpm installed successfully"
+        echo "pnpm version: $(pnpm --version)"
+    else
+        echo "❌ Failed to install pnpm"
+        exit 1
+    fi
+}
+
 echo "🔧 Installing prerequisites..."
 install_nodejs
 install_git
+install_pnpm
 
 echo ""
 echo "📥 Cloning official Sui Explorer..."
@@ -158,8 +179,17 @@ except Exception as e:
 PYTHON_EOF
 
 echo ""
-echo "📦 Installing dependencies..."
-npm install
+echo "📦 Installing dependencies with pnpm (workspace support)..."
+
+# First install root dependencies (workspace setup)
+echo "🔧 Installing workspace dependencies from root..."
+cd "$EXPLORER_DIR"
+pnpm install
+
+# Then install app-specific dependencies
+echo "🔧 Installing explorer app dependencies..."
+cd "$EXPLORER_DIR/apps/explorer"
+# Dependencies should already be installed by workspace, but ensure they're available
 
 # If it's not a Next.js project, create the basic structure
 if [ ! -f "next.config.js" ]; then
@@ -419,18 +449,18 @@ echo "📋 Updated package.json scripts:"
 grep -A 10 '"scripts"' package.json
 
 echo ""
-echo "🔨 Building the explorer..."
+echo "🔨 Building the explorer with pnpm..."
 
 # Try to build
-if npm run build; then
+if pnpm run build; then
     echo "✅ Build successful!"
-    START_CMD="npm start"
-elif npm run dev 2>/dev/null; then
+    START_CMD="pnpm start"
+elif pnpm run dev 2>/dev/null; then
     echo "✅ Development mode working!"
-    START_CMD="npm run dev"
+    START_CMD="pnpm run dev"
 else
     echo "⚠️  Build failed, but continuing with development mode"
-    START_CMD="npm run dev"
+    START_CMD="pnpm run dev"
 fi
 
 echo ""
@@ -510,6 +540,15 @@ fi
 echo ""
 echo "🔧 Creating systemd service for official explorer..."
 
+# Get the actual path to pnpm
+PNPM_PATH=$(which pnpm)
+if [ -z "$PNPM_PATH" ]; then
+    echo "❌ pnpm not found in PATH"
+    PNPM_PATH="/usr/local/bin/pnpm"  # fallback
+fi
+
+echo "Using pnpm at: $PNPM_PATH"
+
 cat > /tmp/sui-explorer.service << EOF
 [Unit]
 Description=Official Sui Block Explorer
@@ -527,7 +566,7 @@ Environment=NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
 Environment=NEXT_PUBLIC_NETWORK=custom
 Environment=NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
 Environment=NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
-ExecStart=/usr/bin/$START_CMD
+ExecStart=$PNPM_PATH start
 Restart=always
 RestartSec=10
 StandardOutput=journal

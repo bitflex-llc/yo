@@ -18,8 +18,10 @@ This deployment uses **ONLY** the official MystenLabs Sui Explorer. All fallback
 - **Purpose**: Force installs the official Sui Explorer
 - **Port**: 3011
 - **Directory**: /root/sui-explorer/apps/explorer (monorepo structure)
+- **Package Manager**: pnpm (required for workspace dependencies)
 - **Features**: 
   - Clones from MystenLabs/sui-explorer
+  - Installs pnpm for workspace support
   - Builds from apps/explorer subdirectory
   - Configures for BCFlex network
   - Sets up systemd service
@@ -105,6 +107,9 @@ sudo ./status_port_3011.sh
 # Navigate to explorer app directory
 cd /root/sui-explorer/apps/explorer
 
+# Install workspace dependencies (from root)
+cd /root/sui-explorer && pnpm install
+
 # Check port usage
 lsof -i :3011
 
@@ -112,7 +117,7 @@ lsof -i :3011
 lsof -ti:3011 | xargs kill -9
 
 # Start explorer manually
-PORT=3011 npm start
+cd /root/sui-explorer/apps/explorer && PORT=3011 pnpm start
 
 # Test explorer
 curl -I http://localhost:3011
