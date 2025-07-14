@@ -408,20 +408,83 @@ setup_block_explorer() {
     
     # Create explorer directory
     mkdir -p $SUI_CONFIG_DIR/explorer
-    cd $SUI_CONFIG_DIR/explorer
+    cd $SUI_CONFIG_DIR/explorer || {
+        print_error "Failed to create/access explorer directory"
+        return 1
+    }
     
     # Clone the Sui explorer (if not already present)
     if [ ! -d "sui-explorer" ]; then
-        git clone https://github.com/MystenLabs/sui.git sui-explorer
-        cd sui-explorer/apps/explorer
+        print_status "Cloning Sui repository for explorer..."
+        if git clone https://github.com/MystenLabs/sui.git sui-explorer; then
+            print_success "Successfully cloned Sui repository"
+        else
+            print_error "Failed to clone Sui repository"
+            print_warning "Block explorer setup skipped. You can set it up manually later."
+            cd $SUI_CONFIG_DIR
+            return 1
+        fi
     else
-        cd sui-explorer/apps/explorer
-        git pull
+        print_status "Sui explorer repository already exists, updating..."
+        cd sui-explorer && git pull && cd ..
+    fi
+    
+    # Check if the explorer app directory exists
+    if [ -d "sui-explorer/apps/explorer" ]; then
+        cd sui-explorer/apps/explorer || {
+            print_error "Failed to access explorer app directory"
+            cd $SUI_CONFIG_DIR
+            return 1
+        }
+    else
+        print_warning "Explorer app directory not found in sui-explorer/apps/explorer"
+        print_warning "Checking alternative locations..."
+        
+        # Try to find the explorer in different locations
+        if [ -d "sui-explorer/dapps/sui-explorer" ]; then
+            print_status "Found explorer at dapps/sui-explorer"
+            cd sui-explorer/dapps/sui-explorer
+        elif [ -d "sui-explorer/explorer" ]; then
+            print_status "Found explorer at explorer/"
+            cd sui-explorer/explorer
+        else
+            print_error "Could not find Sui explorer application in the repository"
+            print_warning "Available directories in sui-explorer:"
+            ls -la sui-explorer/ 2>/dev/null || echo "Cannot list repository contents"
+            print_warning "Block explorer setup skipped. You can set it up manually later."
+            cd $SUI_CONFIG_DIR
+            return 1
+        fi
+    fi
+    
+    # Check if package.json exists to confirm we're in the right place
+    if [ ! -f "package.json" ]; then
+        print_error "No package.json found in explorer directory"
+        print_warning "Block explorer setup skipped. You can set it up manually later."
+        cd $SUI_CONFIG_DIR
+        return 1
     fi
     
     # Install dependencies
     print_status "Installing explorer dependencies..."
-    pnpm install
+    if ! command -v pnpm >/dev/null 2>&1; then
+        print_warning "pnpm not found, trying with npm..."
+        if npm install; then
+            print_success "Dependencies installed with npm"
+        else
+            print_error "Failed to install dependencies"
+            cd $SUI_CONFIG_DIR
+            return 1
+        fi
+    else
+        if pnpm install; then
+            print_success "Dependencies installed with pnpm"
+        else
+            print_error "Failed to install dependencies with pnpm"
+            cd $SUI_CONFIG_DIR
+            return 1
+        fi
+    fi
     
     # Create environment configuration for local network
     cat > .env.local << EOF
@@ -436,10 +499,24 @@ EOF
     
     # Build the explorer
     print_status "Building block explorer (this may take 10-15 minutes)..."
-    pnpm build
+    if ! command -v pnpm >/dev/null 2>&1; then
+        if npm run build; then
+            print_success "Block explorer built successfully with npm"
+        else
+            print_warning "Block explorer build failed, but setup partially complete"
+            print_warning "You can try building manually later with: npm run build"
+        fi
+    else
+        if pnpm build; then
+            print_success "Block explorer built successfully with pnpm"
+        else
+            print_warning "Block explorer build failed, but setup partially complete"
+            print_warning "You can try building manually later with: pnpm build"
+        fi
+    fi
     
     print_success "Block explorer setup completed"
-    cd $SUI_CONFIG_DIR
+    cd $SUI_CONFIG_DIR || print_warning "Failed to return to config directory"
 }
 
 setup_faucet() {
@@ -550,6 +627,33 @@ Environment=RUST_LOG=info
 WantedBy=multi-user.target
 EOF
 
+    # Create explorer startup script
+    cat > $SUI_CONFIG_DIR/start_explorer.sh << 'EOF'
+#!/bin/bash
+# Sui Explorer Startup Script
+cd "$HOME/.sui/explorer" || exit 1
+
+# Find the explorer directory
+if [ -d "sui-explorer/apps/explorer" ]; then
+    cd sui-explorer/apps/explorer
+elif [ -d "sui-explorer/dapps/sui-explorer" ]; then
+    cd sui-explorer/dapps/sui-explorer
+elif [ -d "sui-explorer/explorer" ]; then
+    cd sui-explorer/explorer
+else
+    echo "Error: Could not find explorer directory"
+    exit 1
+fi
+
+# Start the explorer
+if command -v pnpm >/dev/null 2>&1; then
+    exec pnpm start
+else
+    exec npm start
+fi
+EOF
+    chmod +x $SUI_CONFIG_DIR/start_explorer.sh
+
     # Block Explorer Service
     sudo tee /etc/systemd/system/sui-explorer.service > /dev/null << EOF
 [Unit]
@@ -562,8 +666,7 @@ Requires=sui-fullnode.service
 Type=simple
 User=$USER
 Group=$USER
-WorkingDirectory=$SUI_CONFIG_DIR/explorer/sui-explorer/apps/explorer
-ExecStart=/usr/bin/env pnpm start
+ExecStart=$SUI_CONFIG_DIR/start_explorer.sh
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -628,13 +731,25 @@ sudo systemctl start sui-validator
 sleep 5
 sudo systemctl start sui-faucet
 sleep 5
-sudo systemctl start sui-explorer
+
+# Only start explorer if the service exists
+if systemctl list-unit-files | grep -q sui-explorer.service; then
+    sudo systemctl start sui-explorer
+    EXPLORER_AVAILABLE=true
+else
+    echo "Note: Block explorer service not available"
+    EXPLORER_AVAILABLE=false
+fi
 
 echo "Sui Network started successfully!"
 echo "Services status:"
 systemctl status sui-fullnode --no-pager -l
 systemctl status sui-validator --no-pager -l
 systemctl status sui-faucet --no-pager -l
+if [ "$EXPLORER_AVAILABLE" = true ]; then
+    systemctl status sui-explorer --no-pager -l
+fi
+EOF
 systemctl status sui-explorer --no-pager -l
 EOF
 
@@ -642,7 +757,12 @@ EOF
     cat > $SUI_CONFIG_DIR/stop_sui_network.sh << 'EOF'
 #!/bin/bash
 echo "Stopping Sui Network..."
-sudo systemctl stop sui-explorer
+
+# Only stop explorer if the service exists
+if systemctl list-unit-files | grep -q sui-explorer.service; then
+    sudo systemctl stop sui-explorer
+fi
+
 sudo systemctl stop sui-faucet
 sudo systemctl stop sui-validator
 sudo systemctl stop sui-fullnode
@@ -658,14 +778,22 @@ echo "Services:"
 systemctl is-active sui-fullnode && echo "✓ Full Node: Running" || echo "✗ Full Node: Stopped"
 systemctl is-active sui-validator && echo "✓ Validator: Running" || echo "✗ Validator: Stopped"
 systemctl is-active sui-faucet && echo "✓ Faucet: Running" || echo "✗ Faucet: Stopped"
-systemctl is-active sui-explorer && echo "✓ Explorer: Running" || echo "✗ Explorer: Stopped"
+if systemctl list-unit-files | grep -q sui-explorer.service; then
+    systemctl is-active sui-explorer && echo "✓ Explorer: Running" || echo "✗ Explorer: Stopped"
+else
+    echo "ℹ Explorer: Not installed"
+fi
 
 echo ""
 echo "Network endpoints:"
 echo "- RPC: http://localhost:9000"
 echo "- WebSocket: ws://localhost:9001"
 echo "- Faucet: http://localhost:5003"
-echo "- Block Explorer: http://localhost:3000"
+if systemctl list-unit-files | grep -q sui-explorer.service; then
+    echo "- Block Explorer: http://localhost:3000"
+else
+    echo "- Block Explorer: Not available"
+fi
 echo "- Metrics: http://localhost:9184"
 
 echo ""
@@ -772,7 +900,17 @@ main() {
     create_premine_account
     setup_validator
     setup_fullnode
-    setup_block_explorer
+    
+    # Try to setup block explorer, but don't fail if it doesn't work
+    if setup_block_explorer; then
+        print_success "Block explorer setup completed successfully"
+        EXPLORER_ENABLED=true
+    else
+        print_warning "Block explorer setup failed or was skipped"
+        print_warning "The network will still work without the explorer"
+        EXPLORER_ENABLED=false
+    fi
+    
     setup_faucet
     create_systemd_services
     setup_firewall
