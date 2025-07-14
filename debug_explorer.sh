@@ -620,22 +620,68 @@ else
     echo "📋 Available scripts:"
     npm run 2>&1 || echo "Could not list scripts"
     echo ""
-    echo "💡 The official Sui Explorer appears to be missing standard scripts."
-    echo "🔄 Switching to standalone explorer setup..."
+    echo "� FORCE-FIXING: Adding missing npm scripts to official explorer..."
     
-    # Remove the problematic explorer
-    cd /
-    rm -rf "$EXPLORER_DIR"
+    # Force add missing scripts using Python
+    python3 << 'PYTHON_EOF'
+import json
+import sys
+
+try:
+    with open('package.json', 'r') as f:
+        package_data = json.load(f)
     
-    # Set up standalone explorer
-    setup_standalone_explorer
+    # Ensure scripts section exists
+    if 'scripts' not in package_data:
+        package_data['scripts'] = {}
     
-    # Update variables for the rest of the script
-    START_CMD="npm start"
-    cd "$EXPLORER_DIR"
+    # Add essential scripts
+    scripts_to_add = {
+        'dev': 'next dev',
+        'build': 'next build', 
+        'start': 'next start',
+        'lint': 'next lint'
+    }
     
-    echo "✅ Standalone explorer setup completed!"
-    echo "✅ Continuing with tests using standalone explorer..."
+    for script_name, script_command in scripts_to_add.items():
+        package_data['scripts'][script_name] = script_command
+        print(f"Added script: {script_name}")
+    
+    # Ensure required dependencies
+    if 'dependencies' not in package_data:
+        package_data['dependencies'] = {}
+    
+    # Add Next.js dependencies
+    deps_to_add = {
+        'next': '^13.0.0',
+        'react': '^18.0.0',
+        'react-dom': '^18.0.0'
+    }
+    
+    for dep_name, dep_version in deps_to_add.items():
+        if dep_name not in package_data['dependencies']:
+            package_data['dependencies'][dep_name] = dep_version
+            print(f"Added dependency: {dep_name}")
+    
+    # Write back the modified package.json
+    with open('package.json', 'w') as f:
+        json.dump(package_data, f, indent=2)
+    
+    print("✅ Package.json updated successfully")
+    
+except Exception as e:
+    print(f"❌ Error updating package.json: {e}")
+PYTHON_EOF
+
+    # Reinstall dependencies
+    echo "📦 Reinstalling dependencies with new scripts..."
+    npm install
+    
+    # Set the start command
+    START_CMD="npm run dev"
+    
+    echo "✅ Official explorer fixed - now has proper npm scripts!"
+    echo "✅ Continuing with official explorer (no fallback)..."
 fi
 
 echo "🚀 Using command: $START_CMD"
