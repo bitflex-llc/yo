@@ -73,7 +73,7 @@ if [ -f "package.json" ]; then
         const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
         if (pkg.scripts) {
             Object.keys(pkg.scripts).forEach(script => {
-                console.log(\`  \${script}: \${pkg.scripts[script]}\`);
+                console.log('  ' + script + ': ' + pkg.scripts[script]);
             });
         } else {
             console.log('  No scripts found');

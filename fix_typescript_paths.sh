@@ -184,7 +184,7 @@ analyze_import_errors() {
         echo ""
         echo "🔧 Checking if these files exist:"
         echo "$PROBLEMATIC_IMPORTS" | while read -r line; do
-            if [[ $line =~ from[[:space:]]+[\"\'](~/[^\"\']+) ]]; then
+            if [[ $line =~ from[[:space:]]+[\"\'](~/[^\"\']+)[\"\']] ]]; then
                 IMPORT_PATH="${BASH_REMATCH[1]}"
                 # Convert ~ to src/
                 ACTUAL_PATH="${IMPORT_PATH/#\~\//src/}"
