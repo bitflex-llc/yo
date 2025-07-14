@@ -40,7 +40,7 @@ info() {
 
 # Check if running as root
 check_root() {
-    if [ "$EUID" -ne 0 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
         error "This script must be run as root. Use: sudo $0"
     fi
 }
@@ -110,7 +110,7 @@ check_explorer() {
         warn "No service found on port $EXPLORER_PORT"
         info "Make sure the Sui block explorer is running before configuring nginx"
         read -p "Continue anyway? (y/N): " -r
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        if ! echo "$REPLY" | grep -q "^[Yy]$"; then
             exit 1
         fi
     else
@@ -366,7 +366,7 @@ main() {
 }
 
 # Handle script arguments
-case "${1:-}" in
+case "${1-}" in
     "--help"|"-h")
         echo "Usage: $0 [--help]"
         echo

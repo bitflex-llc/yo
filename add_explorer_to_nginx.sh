@@ -4,7 +4,7 @@
 # Domain: Sui.bcflex.com
 # This script assumes nginx is already installed and running
 
-set -e
+set -eu
 
 DOMAIN="sui.bcflex.com"
 EXPLORER_PORT="8080"
@@ -17,7 +17,7 @@ echo "📍 Domain: $DOMAIN"
 echo "🔌 Explorer Port: $EXPLORER_PORT"
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then
+if [ "$(id -u)" -ne 0 ]; then
     echo "❌ Please run as root (use sudo)"
     exit 1
 fi
