@@ -119,3 +119,66 @@ echo "- Custom next.config.js"
 echo "- Custom pages directory"
 echo "- Modified package.json scripts"
 echo ""
+
+echo ""
+echo "🔍 Detailed structure analysis for import path debugging..."
+
+# Check TypeScript configuration
+echo "📋 TypeScript configuration:"
+if [ -f "tsconfig.json" ]; then
+    echo "✅ tsconfig.json found"
+    if grep -q '"~"' tsconfig.json 2>/dev/null; then
+        echo "✅ Path mapping for '~' found in tsconfig.json"
+        echo "Path mappings:"
+        grep -A 5 -B 5 '"~"' tsconfig.json 2>/dev/null || echo "Could not extract path mapping details"
+    else
+        echo "❌ No '~' path mapping found in tsconfig.json"
+    fi
+else
+    echo "❌ No tsconfig.json found"
+fi
+
+# Check for Layout component
+echo ""
+echo "📋 Searching for Layout component:"
+if [ -d "src/components" ]; then
+    echo "✅ src/components directory exists"
+    find src/components -name "*Layout*" -type f 2>/dev/null || echo "No Layout component found in src/components"
+else
+    echo "❌ src/components directory not found"
+fi
+
+# Check for any Layout components anywhere
+echo "📋 All Layout components in project:"
+find . -name "*Layout*" -type f 2>/dev/null | head -10 || echo "No Layout components found anywhere"
+
+# Check the problematic file
+echo ""
+echo "📋 Analyzing src/pages/index.tsx import issues:"
+if [ -f "src/pages/index.tsx" ]; then
+    echo "✅ src/pages/index.tsx exists"
+    echo "Import statements in src/pages/index.tsx:"
+    grep "^import" src/pages/index.tsx | head -10 2>/dev/null || echo "Could not read import statements"
+    
+    echo ""
+    echo "Problematic imports using '~' path:"
+    grep "from.*~" src/pages/index.tsx 2>/dev/null || echo "No '~' imports found"
+else
+    echo "❌ src/pages/index.tsx not found"
+fi
+
+# Check root-level tsconfig for workspace
+echo ""
+echo "📋 Checking workspace-level TypeScript config:"
+if [ -f "../../tsconfig.json" ]; then
+    echo "✅ Workspace tsconfig.json found"
+    cd ../..
+    if grep -q '"~"' tsconfig.json 2>/dev/null; then
+        echo "✅ Workspace-level path mapping found"
+    else
+        echo "❌ No workspace-level path mapping found"
+    fi
+    cd apps/explorer
+else
+    echo "ℹ️  No workspace tsconfig.json found"
+fi
