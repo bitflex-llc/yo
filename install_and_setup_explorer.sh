@@ -8,6 +8,7 @@ set -eu
 DOMAIN="sui.bcflex.com"
 EXPLORER_PORT="3000"
 EXPLORER_DIR="/root/sui-explorer"
+RPC_URL="http://sui.bcflex.com:9000"
 NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
 NGINX_SITES_ENABLED="/etc/nginx/sites-enabled"
 NGINX_CONFIG_FILE="$NGINX_SITES_AVAILABLE/$DOMAIN"
@@ -90,46 +91,23 @@ setup_explorer() {
         rm -rf "$EXPLORER_DIR"
     fi
     
-    # Clone the explorer repository
-    echo "📥 Cloning Sui Explorer repository..."
-    git clone https://github.com/MystenLabs/sui.git "$EXPLORER_DIR"
-    
-    # Find the correct explorer directory
-    ACTUAL_EXPLORER_DIR=""
-    for dir in "$EXPLORER_DIR/apps/explorer" "$EXPLORER_DIR/apps/wallet" "$EXPLORER_DIR/explorer" "$EXPLORER_DIR/dapps/sui-explorer"; do
-        if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
-            ACTUAL_EXPLORER_DIR="$dir"
-            echo "✅ Found explorer at: $ACTUAL_EXPLORER_DIR"
-            break
-        fi
-    done
-    
-    if [ -z "$ACTUAL_EXPLORER_DIR" ]; then
-        echo "❌ Explorer directory not found in repository"
-        echo "📋 Available directories:"
-        find "$EXPLORER_DIR" -name "package.json" -type f | head -10
-        echo ""
-        echo "💡 Let's try using a standalone explorer instead..."
-        
-        # Remove the cloned sui repo
-        rm -rf "$EXPLORER_DIR"
-        
-        # Use a standalone explorer
-        setup_standalone_explorer
-        return
-    fi
+    # Clone the official Sui Explorer repository
+    echo "📥 Cloning official Sui Explorer repository..."
+    git clone https://github.com/MystenLabs/sui-explorer.git "$EXPLORER_DIR"
     
     # Navigate to explorer directory
-    cd "$ACTUAL_EXPLORER_DIR"
+    cd "$EXPLORER_DIR"
     
-    # Check if it's a Next.js app
-    if ! grep -q "next" package.json 2>/dev/null; then
-        echo "⚠️  This doesn't appear to be the web explorer"
+    # Check if it's a valid Next.js project
+    if [ ! -f "package.json" ]; then
+        echo "❌ No package.json found in explorer repository"
         echo "💡 Trying standalone explorer instead..."
         rm -rf "$EXPLORER_DIR"
         setup_standalone_explorer
         return
     fi
+    
+    echo "✅ Found valid explorer project"
     
     # Install dependencies
     echo "📦 Installing explorer dependencies..."
@@ -139,18 +117,20 @@ setup_explorer() {
     echo "⚙️ Creating environment configuration..."
     cat > .env.local << EOF
 # Sui Explorer Configuration
-NEXT_PUBLIC_RPC_URL=http://localhost:9000
-NEXT_PUBLIC_WS_URL=ws://localhost:9001
+NEXT_PUBLIC_RPC_URL=$RPC_URL
+NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
 PORT=$EXPLORER_PORT
 NODE_ENV=production
+
+# Custom network configuration
+NEXT_PUBLIC_NETWORK=custom
+NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
+NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
 EOF
     
     # Build the explorer
     echo "🔨 Building the explorer..."
     npm run build
-    
-    # Update the global explorer directory variable
-    EXPLORER_DIR="$ACTUAL_EXPLORER_DIR"
     
     echo "✅ Explorer setup completed"
 }
@@ -187,15 +167,15 @@ EOF
     npm install
     
     # Create simple web explorer
-    cat > server.js << 'EOF'
+    cat > server.js << EOF
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:9000';
+const PORT = process.env.PORT || $EXPLORER_PORT;
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || '$RPC_URL';
 
 app.use(cors());
 app.use(express.json());
@@ -212,7 +192,8 @@ app.get('/api/system-state', async (req, res) => {
         });
         res.json(response.data);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch system state' });
+        console.error('RPC Error:', error.message);
+        res.status(500).json({ error: 'Failed to fetch system state', rpc_url: RPC_URL });
     }
 });
 
@@ -227,13 +208,14 @@ app.get('/api/chain-info', async (req, res) => {
         });
         res.json(response.data);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch chain info' });
+        console.error('RPC Error:', error.message);
+        res.status(500).json({ error: 'Failed to fetch chain info', rpc_url: RPC_URL });
     }
 });
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+    res.json({ status: 'healthy', timestamp: new Date().toISOString(), rpc_url: RPC_URL });
 });
 
 // Serve main page
@@ -242,20 +224,20 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Sui Explorer running on port ${PORT}`);
-    console.log(`RPC URL: ${RPC_URL}`);
+    console.log(\`Sui Explorer running on port \${PORT}\`);
+    console.log(\`RPC URL: \${RPC_URL}\`);
 });
 EOF
     
     # Create public directory and HTML file
     mkdir -p public
-    cat > public/index.html << 'EOF'
+    cat > public/index.html << EOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sui Blockchain Explorer</title>
+    <title>BCFlex Sui Blockchain Explorer</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -332,6 +314,13 @@ EOF
             margin: 20px 0;
             border-radius: 5px;
         }
+        .warning-box {
+            background: rgba(255, 193, 7, 0.2);
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
         #status {
             text-align: center;
             margin: 20px 0;
@@ -339,13 +328,20 @@ EOF
         .loading {
             opacity: 0.6;
         }
+        .error {
+            color: #ff6b6b;
+        }
+        .success {
+            color: #00ff7f;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">⚡ Sui Explorer</div>
+            <div class="logo">⚡ BCFlex Sui Explorer</div>
             <p>Custom Sui Blockchain Network Explorer</p>
+            <p><small>RPC: $RPC_URL</small></p>
         </div>
 
         <div id="status">
@@ -353,10 +349,11 @@ EOF
         </div>
 
         <div class="info-box">
-            <strong>🎯 Custom Network Features:</strong><br>
+            <strong>🎯 BCFlex Custom Network Features:</strong><br>
             • 1% daily rewards for delegators<br>
             • 1.5% daily rewards for validators<br>
-            • Local development network
+            • Custom payout logic implemented<br>
+            • RPC endpoint: $RPC_URL
         </div>
 
         <div class="grid">
@@ -383,18 +380,24 @@ EOF
         </div>
 
         <div class="card">
-            <h3>🔗 Network Endpoints</h3>
-            <p><strong>RPC:</strong> http://localhost:9000</p>
-            <p><strong>WebSocket:</strong> ws://localhost:9001</p>
-            <p><strong>Faucet:</strong> http://localhost:5003</p>
-            <p><strong>Metrics:</strong> http://localhost:9184</p>
+            <h3>🔗 BCFlex Network Endpoints</h3>
+            <p><strong>RPC:</strong> $RPC_URL</p>
+            <p><strong>WebSocket:</strong> ws://sui.bcflex.com:9001</p>
+            <p><strong>Faucet:</strong> http://sui.bcflex.com:5003</p>
+            <p><strong>Metrics:</strong> http://sui.bcflex.com:9184</p>
+            <p><strong>Explorer:</strong> https://sui.bcflex.com</p>
         </div>
 
         <div class="card">
-            <h3>🧪 Quick Tests</h3>
+            <h3>🧪 Connection Tests</h3>
             <button class="btn" onclick="testRPC()">Test RPC Connection</button>
             <button class="btn" onclick="testFaucet()">Test Faucet</button>
             <div id="testResults" style="margin-top: 15px;"></div>
+        </div>
+
+        <div id="rpcStatus" class="warning-box" style="display: none;">
+            <strong>⚠️ RPC Connection Status:</strong>
+            <div id="rpcDetails"></div>
         </div>
     </div>
 
@@ -406,6 +409,11 @@ EOF
                 const chainData = await chainResponse.json();
                 if (chainData.result) {
                     document.getElementById('chainId').textContent = chainData.result;
+                    document.getElementById('chainId').className = 'stat-number success';
+                } else {
+                    document.getElementById('chainId').textContent = 'Error';
+                    document.getElementById('chainId').className = 'stat-number error';
+                    showRPCStatus('Chain ID fetch failed: ' + (chainData.error || 'Unknown error'));
                 }
 
                 // Fetch system state
@@ -414,15 +422,37 @@ EOF
                 if (systemData.result) {
                     const state = systemData.result;
                     document.getElementById('epoch').textContent = state.epoch || 'N/A';
+                    document.getElementById('epoch').className = 'stat-number success';
                     document.getElementById('validators').textContent = 
                         state.activeValidators ? state.activeValidators.length : 'N/A';
+                    document.getElementById('validators').className = 'stat-number success';
+                    hideRPCStatus();
+                } else {
+                    document.getElementById('epoch').textContent = 'Error';
+                    document.getElementById('epoch').className = 'stat-number error';
+                    document.getElementById('validators').textContent = 'Error';
+                    document.getElementById('validators').className = 'stat-number error';
+                    showRPCStatus('System state fetch failed: ' + (systemData.error || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Error fetching data:', error);
                 document.getElementById('chainId').textContent = 'Error';
+                document.getElementById('chainId').className = 'stat-number error';
                 document.getElementById('epoch').textContent = 'Error';
+                document.getElementById('epoch').className = 'stat-number error';
                 document.getElementById('validators').textContent = 'Error';
+                document.getElementById('validators').className = 'stat-number error';
+                showRPCStatus('Network error: ' + error.message);
             }
+        }
+
+        function showRPCStatus(message) {
+            document.getElementById('rpcStatus').style.display = 'block';
+            document.getElementById('rpcDetails').innerHTML = message + '<br><small>RPC URL: $RPC_URL</small>';
+        }
+
+        function hideRPCStatus() {
+            document.getElementById('rpcStatus').style.display = 'none';
         }
 
         function refreshData() {
@@ -434,34 +464,34 @@ EOF
 
         async function testRPC() {
             const results = document.getElementById('testResults');
-            results.innerHTML = 'Testing RPC...';
+            results.innerHTML = 'Testing RPC connection to $RPC_URL...';
             
             try {
                 const response = await fetch('/api/system-state');
                 const data = await response.json();
                 if (data.result) {
-                    results.innerHTML = '<span style="color: #00ff7f;">✅ RPC Connection: OK</span>';
+                    results.innerHTML = '<span class="success">✅ RPC Connection: OK</span>';
                 } else {
-                    results.innerHTML = '<span style="color: #ff6b6b;">❌ RPC Connection: Failed</span>';
+                    results.innerHTML = '<span class="error">❌ RPC Connection: Failed - ' + (data.error || 'Unknown error') + '</span>';
                 }
             } catch (error) {
-                results.innerHTML = '<span style="color: #ff6b6b;">❌ RPC Connection: Error</span>';
+                results.innerHTML = '<span class="error">❌ RPC Connection: Network Error - ' + error.message + '</span>';
             }
         }
 
         async function testFaucet() {
             const results = document.getElementById('testResults');
-            results.innerHTML = 'Testing Faucet...';
+            results.innerHTML = 'Testing Faucet connection...';
             
             try {
-                const response = await fetch('http://localhost:5003');
+                const response = await fetch('http://sui.bcflex.com:5003');
                 if (response.ok) {
-                    results.innerHTML = '<span style="color: #00ff7f;">✅ Faucet: Available</span>';
+                    results.innerHTML = '<span class="success">✅ Faucet: Available</span>';
                 } else {
-                    results.innerHTML = '<span style="color: #ff6b6b;">❌ Faucet: Not responding</span>';
+                    results.innerHTML = '<span class="error">❌ Faucet: Not responding (HTTP ' + response.status + ')</span>';
                 }
             } catch (error) {
-                results.innerHTML = '<span style="color: #ff6b6b;">❌ Faucet: Not available</span>';
+                results.innerHTML = '<span class="error">❌ Faucet: Not available - ' + error.message + '</span>';
             }
         }
 
@@ -494,8 +524,11 @@ User=root
 WorkingDirectory=$EXPLORER_DIR
 Environment=NODE_ENV=production
 Environment=PORT=$EXPLORER_PORT
-Environment=NEXT_PUBLIC_RPC_URL=http://localhost:9000
-Environment=NEXT_PUBLIC_WS_URL=ws://localhost:9001
+Environment=NEXT_PUBLIC_RPC_URL=$RPC_URL
+Environment=NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
+Environment=NEXT_PUBLIC_NETWORK=custom
+Environment=NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
+Environment=NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
