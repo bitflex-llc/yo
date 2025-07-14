@@ -74,11 +74,16 @@ cd "$EXPLORER_DIR"
 
 echo "✅ Official Sui Explorer cloned"
 
+# Navigate to the actual explorer app directory
+echo ""
+echo "📁 Navigating to explorer app directory..."
+cd "$EXPLORER_DIR/apps/explorer"
+
 # Check what we have
 echo ""
-echo "📋 Analyzing repository structure..."
+echo "📋 Analyzing explorer app structure..."
 echo "Current directory: $(pwd)"
-echo "Repository contents:"
+echo "Explorer app contents:"
 ls -la
 
 if [ -f "package.json" ]; then
@@ -514,7 +519,7 @@ Wants=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=$EXPLORER_DIR
+WorkingDirectory=$EXPLORER_DIR/apps/explorer
 Environment=NODE_ENV=production
 Environment=PORT=$EXPLORER_PORT
 Environment=NEXT_PUBLIC_RPC_URL=$RPC_URL

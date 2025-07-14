@@ -50,7 +50,15 @@ EXPLORER_DIR="/root/sui-explorer"
 
 if [ -d "$EXPLORER_DIR" ]; then
     echo "🚀 Starting Sui Explorer on port 3011..."
-    cd "$EXPLORER_DIR"
+    
+    # Check if apps/explorer directory exists
+    if [ -d "$EXPLORER_DIR/apps/explorer" ]; then
+        cd "$EXPLORER_DIR/apps/explorer"
+        echo "✅ Using monorepo structure: apps/explorer"
+    else
+        cd "$EXPLORER_DIR"
+        echo "⚠️  Using root directory (may be incorrect)"
+    fi
     
     # Ensure .env.local has correct port
     if [ -f ".env.local" ]; then

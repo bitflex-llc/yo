@@ -33,14 +33,23 @@ echo "---------------------"
 if [ -d "$EXPLORER_DIR" ]; then
     echo "✅ Explorer directory exists"
     
-    # Check if package.json exists
-    if [ -f "$EXPLORER_DIR/package.json" ]; then
+    # Check if apps/explorer directory exists (monorepo structure)
+    if [ -d "$EXPLORER_DIR/apps/explorer" ]; then
+        echo "✅ Monorepo structure detected (apps/explorer)"
+        EXPLORER_APP_DIR="$EXPLORER_DIR/apps/explorer"
+    else
+        echo "⚠️  Using root directory (may be incorrect)"
+        EXPLORER_APP_DIR="$EXPLORER_DIR"
+    fi
+    
+    # Check if package.json exists in the correct location
+    if [ -f "$EXPLORER_APP_DIR/package.json" ]; then
         echo "✅ Explorer installed"
         
         # Check .env.local
-        if [ -f "$EXPLORER_DIR/.env.local" ]; then
+        if [ -f "$EXPLORER_APP_DIR/.env.local" ]; then
             echo "✅ Environment configured"
-            PORT_CONFIG=$(grep "PORT=" "$EXPLORER_DIR/.env.local" 2>/dev/null || echo "PORT not found")
+            PORT_CONFIG=$(grep "PORT=" "$EXPLORER_APP_DIR/.env.local" 2>/dev/null || echo "PORT not found")
             echo "   $PORT_CONFIG"
         else
             echo "⚠️  Environment not configured"
@@ -92,7 +101,7 @@ fi
 echo ""
 echo "🚀 QUICK ACTIONS"
 echo "----------------"
-echo "Start Explorer:     cd $EXPLORER_DIR && PORT=$EXPLORER_PORT npm start"
+echo "Start Explorer:     cd $EXPLORER_DIR/apps/explorer && PORT=$EXPLORER_PORT npm start"
 echo "Kill Port Process:  lsof -ti:$EXPLORER_PORT | xargs kill -9"
 echo "View Logs:          tail -f /tmp/explorer_test.log"
 echo "Test Connection:    curl -I http://localhost:$EXPLORER_PORT"
