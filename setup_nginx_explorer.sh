@@ -3,7 +3,7 @@
 # setup_nginx_explorer.sh
 # Script to configure nginx proxy for Sui block explorer at Sui.bcflex.com with SSL
 
-set -euo pipefail
+set -eu
 
 # Configuration
 DOMAIN="sui.bcflex.com"
