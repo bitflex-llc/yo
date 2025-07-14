@@ -673,12 +673,12 @@ echo "⏳ Waiting 15 seconds for explorer to start..."
 sleep 15
 
 # Test if it's working
-if curl -s http://localhost:3000 >/dev/null 2>&1; then
-    echo "✅ Explorer is responding on port 3000!"
-    echo "🌐 Test: curl -I http://localhost:3000"
-    curl -I http://localhost:3000 2>/dev/null | head -5
+if curl -s http://localhost:$EXPLORER_PORT >/dev/null 2>&1; then
+    echo "✅ Explorer is responding on port $EXPLORER_PORT!"
+    echo "🌐 Test: curl -I http://localhost:$EXPLORER_PORT"
+    curl -I http://localhost:$EXPLORER_PORT 2>/dev/null | head -5
 else
-    echo "❌ Explorer not responding on port 3000"
+    echo "❌ Explorer not responding on port $EXPLORER_PORT"
 fi
 
 # Kill the test process
