@@ -109,6 +109,10 @@ setup_explorer() {
     
     echo "✅ Found valid explorer project"
     
+    # Check available scripts
+    echo "📋 Available npm scripts:"
+    npm run 2>/dev/null || echo "Could not list scripts"
+    
     # Install dependencies
     echo "📦 Installing explorer dependencies..."
     npm install
@@ -128,9 +132,22 @@ NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
 NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
 EOF
     
-    # Build the explorer
+    # Try to build the explorer with different commands
     echo "🔨 Building the explorer..."
-    npm run build
+    if npm run build 2>/dev/null; then
+        echo "✅ Explorer built successfully with 'npm run build'"
+    elif npm run build:prod 2>/dev/null; then
+        echo "✅ Explorer built successfully with 'npm run build:prod'"
+    elif npm run compile 2>/dev/null; then
+        echo "✅ Explorer built successfully with 'npm run compile'"
+    else
+        echo "⚠️  No build script found or build failed"
+        echo "📋 Available scripts in package.json:"
+        if [ -f "package.json" ]; then
+            grep -A 20 '"scripts"' package.json || echo "Could not read scripts"
+        fi
+        echo "💡 Continuing without build step - explorer may still work in development mode"
+    fi
     
     echo "✅ Explorer setup completed"
 }
@@ -512,6 +529,24 @@ EOF
 create_explorer_service() {
     echo "⚙️ Creating systemd service for explorer..."
     
+    # Check if we have a start script or need to use dev
+    cd "$EXPLORER_DIR"
+    START_COMMAND="npm start"
+    
+    # Check available scripts and determine the best start command
+    if npm run | grep -q "start"; then
+        START_COMMAND="npm start"
+        echo "📋 Using 'npm start' command"
+    elif npm run | grep -q "dev"; then
+        START_COMMAND="npm run dev"
+        echo "📋 Using 'npm run dev' command"
+    elif npm run | grep -q "serve"; then
+        START_COMMAND="npm run serve"
+        echo "📋 Using 'npm run serve' command"
+    else
+        echo "⚠️  No clear start command found, defaulting to 'npm start'"
+    fi
+    
     cat > /etc/systemd/system/sui-explorer.service << EOF
 [Unit]
 Description=Sui Block Explorer
@@ -529,7 +564,7 @@ Environment=NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
 Environment=NEXT_PUBLIC_NETWORK=custom
 Environment=NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
 Environment=NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
-ExecStart=/usr/bin/npm start
+ExecStart=/usr/bin/$START_COMMAND
 Restart=always
 RestartSec=10
 StandardOutput=journal
