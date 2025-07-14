@@ -44,21 +44,28 @@ print_error() {
 check_requirements() {
     print_status "Checking system requirements..."
     
-    # Check if running on supported OS
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        print_status "Detected Linux OS"
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        print_status "Detected macOS"
-    else
-        print_error "Unsupported operating system: $OSTYPE"
-        exit 1
-    fi
+    # Check if running on supported OS - use POSIX-compliant detection
+    OS_TYPE=$(uname -s)
+    case "$OS_TYPE" in
+        Linux*)
+            print_status "Detected Linux OS"
+            OS_FAMILY="linux"
+            ;;
+        Darwin*)
+            print_status "Detected macOS"
+            OS_FAMILY="darwin"
+            ;;
+        *)
+            print_error "Unsupported operating system: $OS_TYPE"
+            exit 1
+            ;;
+    esac
     
     # Check available memory (minimum 8GB recommended)
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [ "$OS_FAMILY" = "linux" ]; then
         MEMORY_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
         MEMORY_GB=$((MEMORY_KB / 1024 / 1024))
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
+    elif [ "$OS_FAMILY" = "darwin" ]; then
         MEMORY_BYTES=$(sysctl -n hw.memsize)
         MEMORY_GB=$((MEMORY_BYTES / 1024 / 1024 / 1024))
     fi
@@ -81,17 +88,17 @@ check_requirements() {
 install_dependencies() {
     print_status "Installing system dependencies..."
     
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [ "$OS_FAMILY" = "linux" ]; then
         # Ubuntu/Debian
-        if command -v apt-get &> /dev/null; then
+        if command -v apt-get > /dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y curl wget git build-essential pkg-config libssl-dev cmake clang
         # CentOS/RHEL/Fedora
-        elif command -v yum &> /dev/null; then
+        elif command -v yum > /dev/null 2>&1; then
             sudo yum update -y
             sudo yum groupinstall -y "Development Tools"
             sudo yum install -y curl wget git openssl-devel cmake clang
-        elif command -v dnf &> /dev/null; then
+        elif command -v dnf > /dev/null 2>&1; then
             sudo dnf update -y
             sudo dnf groupinstall -y "Development Tools"
             sudo dnf install -y curl wget git openssl-devel cmake clang
@@ -99,9 +106,9 @@ install_dependencies() {
             print_error "Unsupported Linux distribution. Please install dependencies manually."
             exit 1
         fi
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
+    elif [ "$OS_FAMILY" = "darwin" ]; then
         # macOS
-        if ! command -v brew &> /dev/null; then
+        if ! command -v brew > /dev/null 2>&1; then
             print_status "Installing Homebrew..."
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         fi
@@ -114,9 +121,9 @@ install_dependencies() {
 install_rust() {
     print_status "Installing Rust toolchain..."
     
-    if ! command -v rustc &> /dev/null; then
+    if ! command -v rustc > /dev/null 2>&1; then
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source $HOME/.cargo/env
+        . $HOME/.cargo/env
         print_success "Rust installed successfully"
     else
         print_status "Rust already installed, updating..."
@@ -133,12 +140,12 @@ install_rust() {
 install_nodejs() {
     print_status "Installing Node.js and npm..."
     
-    if ! command -v node &> /dev/null; then
+    if ! command -v node > /dev/null 2>&1; then
         # Install Node.js via Node Version Manager (nvm)
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
         export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
         
         nvm install --lts
         nvm use --lts
@@ -159,7 +166,7 @@ build_sui() {
     print_status "Using current directory as Sui source: $(pwd)"
     
     # Install Rust if not already installed
-    if ! command -v cargo &> /dev/null; then
+    if ! command -v cargo > /dev/null 2>&1; then
         install_rust
     fi
     
@@ -230,69 +237,81 @@ generate_genesis() {
 create_premine_account() {
     print_status "Creating pre-mined account with 1,000,000 SUI..."
     
-    # Generate a new address for the pre-mined account
-    GENESIS_ACCOUNT_ADDRESS=$(sui client new-address secp256k1 2>/dev/null | grep "Created new keypair" | awk '{print $6}')
+    # Try to create a new address with better error handling and output parsing
+    print_status "Attempting to create new address..."
     
+    # Method 1: Try standard command and capture full output
+    NEW_ADDRESS_OUTPUT=$(sui client new-address secp256k1 2>&1)
+    print_status "Command output: $NEW_ADDRESS_OUTPUT"
+    
+    # Try different parsing methods
+    # Look for hex address pattern (0x followed by hex digits)
+    GENESIS_ACCOUNT_ADDRESS=$(echo "$NEW_ADDRESS_OUTPUT" | grep -o "0x[a-fA-F0-9]\{64\}" | head -1)
+    
+    # If that didn't work, try shorter hex patterns
     if [ -z "$GENESIS_ACCOUNT_ADDRESS" ]; then
+        GENESIS_ACCOUNT_ADDRESS=$(echo "$NEW_ADDRESS_OUTPUT" | grep -o "0x[a-fA-F0-9]*" | head -1)
+    fi
+    
+    # If still empty, try to extract from different output formats
+    if [ -z "$GENESIS_ACCOUNT_ADDRESS" ]; then
+        # Try looking for "Created new keypair" pattern
+        GENESIS_ACCOUNT_ADDRESS=$(echo "$NEW_ADDRESS_OUTPUT" | sed -n 's/.*Created new keypair for address: \(0x[a-fA-F0-9]*\).*/\1/p')
+    fi
+    
+    # If still empty, try alternative method
+    if [ -z "$GENESIS_ACCOUNT_ADDRESS" ]; then
+        print_warning "Direct address creation failed, trying alternative method..."
+        
+        # Try using keytool generate
+        sui keytool generate secp256k1 > /dev/null 2>&1 || true
+        
+        # List existing addresses
+        ADDRESSES_OUTPUT=$(sui client addresses 2>&1)
+        print_status "Available addresses: $ADDRESSES_OUTPUT"
+        GENESIS_ACCOUNT_ADDRESS=$(echo "$ADDRESSES_OUTPUT" | grep -o "0x[a-fA-F0-9]*" | head -1)
+    fi
+    
+    # Final validation
+    if [ -z "$GENESIS_ACCOUNT_ADDRESS" ] || [ "$GENESIS_ACCOUNT_ADDRESS" = "saved" ]; then
         print_error "Failed to create genesis account"
+        print_error "Command output was: $NEW_ADDRESS_OUTPUT"
+        print_error "Please create an address manually with: sui client new-address secp256k1"
+        print_error "Then check available addresses with: sui client addresses"
         exit 1
     fi
     
     print_success "Created genesis account: $GENESIS_ACCOUNT_ADDRESS"
     
-    # Export the private key for backup using the correct syntax
-    # Note: The export command syntax varies by Sui version
-    if sui keytool export --help 2>/dev/null | grep -q "key-identity"; then
-        # Newer syntax
-        sui keytool export --key-identity $GENESIS_ACCOUNT_ADDRESS --path $SUI_CONFIG_DIR/genesis_account_key.txt 2>/dev/null || \
-        sui keytool export --key-identity $GENESIS_ACCOUNT_ADDRESS > $SUI_CONFIG_DIR/genesis_account_key.txt
-    else
-        # Try older syntax
-        sui keytool export $GENESIS_ACCOUNT_ADDRESS $SUI_CONFIG_DIR/genesis_account_key.txt 2>/dev/null || \
-        print_warning "Could not export private key automatically. Please backup manually with: sui keytool export --help"
-    fi
+    # Skip the problematic export command for now and just copy keystore
+    print_warning "Skipping private key export due to CLI syntax issues"
+    print_status "Copying keystore files instead..."
     
-    # Alternative: Use sui client to list keys and save the keystore
-    if [ ! -f "$SUI_CONFIG_DIR/genesis_account_key.txt" ] || [ ! -s "$SUI_CONFIG_DIR/genesis_account_key.txt" ]; then
-        print_warning "Private key export failed. Copying keystore instead..."
+    # Copy keystore files
+    if [ -d "$HOME/.sui/sui_config/keystores" ]; then
         cp -r "$HOME/.sui/sui_config/keystores" "$SUI_CONFIG_DIR/" 2>/dev/null || true
-        print_warning "Keystore copied to $SUI_CONFIG_DIR/keystores/"
+        print_success "Keystore backed up to $SUI_CONFIG_DIR/keystores/"
+    elif [ -f "$HOME/.sui/sui_config/sui.keystore" ]; then
+        cp "$HOME/.sui/sui_config/sui.keystore" "$SUI_CONFIG_DIR/" 2>/dev/null || true
+        print_success "Keystore file backed up to $SUI_CONFIG_DIR/"
     fi
     
-    print_warning "IMPORTANT: Genesis account private key saved to $SUI_CONFIG_DIR/genesis_account_key.txt"
-    print_warning "If export failed, check $SUI_CONFIG_DIR/keystores/ for keystore files"
-    print_warning "Keep these files secure and backed up!"
+    print_warning "IMPORTANT: Keystore files contain your private keys!"
+    print_warning "Keep $SUI_CONFIG_DIR/keystores/ secure and backed up!"
     
-    echo "GENESIS_ACCOUNT_ADDRESS=$GENESIS_ACCOUNT_ADDRESS" > $SUI_CONFIG_DIR/account_info.env
+    echo "GENESIS_ACCOUNT_ADDRESS=$GENESIS_ACCOUNT_ADDRESS" > "$SUI_CONFIG_DIR/account_info.env"
 }
 
 setup_validator() {
     print_status "Setting up validator configuration..."
     
-    # Generate validator key - try different command variations
-    print_status "Attempting to create validator info..."
+    # For simplicity, use the genesis account as validator for testing
+    # This avoids CLI syntax issues with validator creation
+    VALIDATOR_ADDRESS="$GENESIS_ACCOUNT_ADDRESS"
+    print_status "Using genesis account as validator for testing: $VALIDATOR_ADDRESS"
     
-    # Try the standard validator setup command
-    if command -v sui-validator >/dev/null 2>&1; then
-        # Use sui-validator binary if available
-        VALIDATOR_OUTPUT=$(sui-validator keygen --scheme secp256k1 2>/dev/null || echo "")
-    else
-        # Use sui client to create validator keys
-        VALIDATOR_OUTPUT=$(sui keytool generate secp256k1 2>/dev/null || echo "")
-    fi
-    
-    # Create a simple validator address from a new keypair
-    VALIDATOR_ADDRESS=$(sui client new-address secp256k1 2>/dev/null | grep "Created new keypair" | awk '{print $6}')
-    
-    if [ -z "$VALIDATOR_ADDRESS" ]; then
-        print_warning "Standard validator creation failed, using alternative method..."
-        # Fallback: use the genesis account as validator for testing
-        VALIDATOR_ADDRESS="$GENESIS_ACCOUNT_ADDRESS"
-        print_warning "Using genesis account as validator for testing: $VALIDATOR_ADDRESS"
-    fi
-    
-    print_success "Created validator: $VALIDATOR_ADDRESS"
-    echo "VALIDATOR_ADDRESS=$VALIDATOR_ADDRESS" >> $SUI_CONFIG_DIR/account_info.env
+    print_success "Validator configured: $VALIDATOR_ADDRESS"
+    echo "VALIDATOR_ADDRESS=$VALIDATOR_ADDRESS" >> "$SUI_CONFIG_DIR/account_info.env"
     
     # Create validator configuration
     cat > $SUI_CONFIG_DIR/validator/validator.yaml << EOF
@@ -652,7 +671,7 @@ echo "- Metrics: http://localhost:9184"
 echo ""
 echo "Account Information:"
 if [ -f "$HOME/.sui/account_info.env" ]; then
-    source "$HOME/.sui/account_info.env"
+    . "$HOME/.sui/account_info.env"
     echo "- Genesis Account: $GENESIS_ACCOUNT_ADDRESS"
     echo "- Validator Address: $VALIDATOR_ADDRESS"
 else

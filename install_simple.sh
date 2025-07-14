@@ -102,18 +102,33 @@ EOF
 create_accounts() {
     print_status "Creating accounts..."
     
-    # Create genesis account
+    # Create genesis account with proper error handling
     print_status "Creating genesis account..."
+    
+    # Check if we already have addresses
     if sui client addresses 2>/dev/null | grep -q "0x"; then
         GENESIS_ACCOUNT_ADDRESS=$(sui client addresses 2>/dev/null | head -1)
         print_status "Using existing address: $GENESIS_ACCOUNT_ADDRESS"
     else
-        # Try to create new address
+        # Try different methods to create new address
+        print_status "Attempting to create new address..."
+        
+        # Method 1: Try current syntax
         if sui client new-address --help 2>/dev/null | grep -q "key-scheme"; then
-            # Newer syntax
-            GENESIS_ACCOUNT_ADDRESS=$(sui client new-address secp256k1 2>/dev/null | grep -o "0x[a-fA-F0-9]*" | head -1)
+            print_status "Using new syntax with --key-scheme..."
+            OUTPUT=$(sui client new-address --key-scheme secp256k1 2>&1)
         else
-            # Alternative approach - generate key with keytool
+            # Method 2: Try older syntax  
+            print_status "Using older syntax..."
+            OUTPUT=$(sui client new-address secp256k1 2>&1)
+        fi
+        
+        # Extract address from output
+        GENESIS_ACCOUNT_ADDRESS=$(echo "$OUTPUT" | grep -o "0x[a-fA-F0-9]*" | head -1)
+        
+        # If that failed, try alternative approach
+        if [ -z "$GENESIS_ACCOUNT_ADDRESS" ]; then
+            print_status "Trying alternative key generation..."
             sui keytool generate secp256k1 >/dev/null 2>&1 || true
             GENESIS_ACCOUNT_ADDRESS=$(sui client addresses 2>/dev/null | head -1)
         fi
@@ -121,8 +136,8 @@ create_accounts() {
     
     if [ -z "$GENESIS_ACCOUNT_ADDRESS" ]; then
         print_error "Failed to create or find genesis account"
-        print_status "Manual account creation required"
-        print_status "Please run: sui client new-address secp256k1"
+        print_status "Please run manually: sui client new-address secp256k1"
+        print_status "Then run this script again"
         exit 1
     fi
     
@@ -136,6 +151,9 @@ create_accounts() {
     if [ -d "$HOME/.sui/sui_config/keystores" ]; then
         cp -r "$HOME/.sui/sui_config/keystores" "$SUI_CONFIG_DIR/" 2>/dev/null || true
         print_success "Keystore backed up to $SUI_CONFIG_DIR/keystores/"
+    elif [ -f "$HOME/.sui/sui_config/sui.keystore" ]; then
+        cp "$HOME/.sui/sui_config/sui.keystore" "$SUI_CONFIG_DIR/" 2>/dev/null || true
+        print_success "Keystore file backed up to $SUI_CONFIG_DIR/"
     fi
     
     print_success "Account creation completed"
