@@ -87,7 +87,43 @@ NODE_ENV=production
 NEXT_PUBLIC_NETWORK=custom
 NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
 NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
+
+# Vite-specific configuration
+VITE_RPC_URL=$RPC_URL
+VITE_WS_URL=ws://sui.bcflex.com:9001
+VITE_NETWORK=custom
+VITE_NETWORK_NAME=BCFlex Sui Network
+VITE_API_ENDPOINT=$RPC_URL
+
+# Development server configuration
+HOST=0.0.0.0
+HOSTNAME=0.0.0.0
 EOF
+
+    # Ensure Vite config allows the host
+    if [ ! -f "vite.config.ts" ] && [ ! -f "vite.config.js" ]; then
+        echo "🔧 Creating Vite configuration for allowed hosts..."
+        cat > vite.config.ts << 'VITEEOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    allowedHosts: [
+      'sui.bcflex.com',
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0',
+      '.bcflex.com'
+    ],
+    host: '0.0.0.0',
+    port: parseInt(process.env.PORT) || 3011,
+    strictPort: false
+  }
+})
+VITEEOF
+    fi
     
     echo "✅ Port configuration updated to $EXPLORER_PORT"
 }
@@ -138,8 +174,8 @@ test_explorer() {
     if kill -0 $EXPLORER_PID 2>/dev/null; then
         echo "✅ Explorer started with pnpm start (PID: $EXPLORER_PID)"
     else
-        echo "⚠️  pnpm start failed, trying dev mode..."
-        pnpm run dev > /tmp/explorer_test.log 2>&1 &
+        echo "⚠️  pnpm start failed, trying dev mode with host settings..."
+        pnpm run dev -- --host 0.0.0.0 --port $EXPLORER_PORT > /tmp/explorer_test.log 2>&1 &
         EXPLORER_PID=$!
         sleep 2
         if kill -0 $EXPLORER_PID 2>/dev/null; then
@@ -147,6 +183,8 @@ test_explorer() {
         else
             echo "❌ Failed to start explorer"
             return 1
+        fi
+    fi
         fi
     fi
     

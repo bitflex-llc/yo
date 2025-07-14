@@ -214,6 +214,49 @@ module.exports = nextConfig
 EOF
 fi
 
+# Create or update Vite configuration to allow sui.bcflex.com host
+echo "🔧 Configuring Vite for allowed hosts..."
+
+if [ -f "vite.config.js" ] || [ -f "vite.config.ts" ]; then
+    echo "📝 Existing Vite config found, backing up..."
+    cp vite.config.* vite.config.backup 2>/dev/null || true
+fi
+
+# Create/update Vite config with allowed hosts
+cat > vite.config.ts << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    allowedHosts: [
+      'sui.bcflex.com',
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0',
+      '.bcflex.com'  // Allow all bcflex.com subdomains
+    ],
+    host: '0.0.0.0',  // Allow external connections
+    port: parseInt(process.env.PORT) || 3011,
+    strictPort: false
+  },
+  define: {
+    'process.env.NEXT_PUBLIC_RPC_URL': JSON.stringify(process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000'),
+    'process.env.NEXT_PUBLIC_WS_URL': JSON.stringify(process.env.NEXT_PUBLIC_WS_URL || 'ws://sui.bcflex.com:9001'),
+    'process.env.NEXT_PUBLIC_NETWORK': JSON.stringify('custom'),
+    'process.env.NEXT_PUBLIC_NETWORK_NAME': JSON.stringify('BCFlex Sui Network'),
+    'process.env.NEXT_PUBLIC_API_ENDPOINT': JSON.stringify(process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000')
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true
+  }
+})
+EOF
+
+echo "✅ Vite configuration created/updated"
+
 # Create pages directory if it doesn't exist
 if [ ! -d "pages" ] && [ ! -d "app" ] && [ ! -d "src" ]; then
     echo "🔧 Creating basic Next.js structure..."
@@ -405,13 +448,36 @@ fi
 echo ""
 echo "⚙️ Creating environment configuration..."
 cat > .env.local << EOF
-# Sui Explorer Configuration
+# Sui Explorer Configuration for Port $EXPLORER_PORT
 NEXT_PUBLIC_RPC_URL=$RPC_URL
 NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
 PORT=$EXPLORER_PORT
 NODE_ENV=production
 
 # Custom network configuration
+NEXT_PUBLIC_NETWORK=custom
+NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
+NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
+
+# Vite-specific configuration
+VITE_RPC_URL=$RPC_URL
+VITE_WS_URL=ws://sui.bcflex.com:9001
+VITE_NETWORK=custom
+VITE_NETWORK_NAME=BCFlex Sui Network
+VITE_API_ENDPOINT=$RPC_URL
+
+# Development server configuration
+HOST=0.0.0.0
+HOSTNAME=0.0.0.0
+EOF
+
+# Also create .env for production
+cat > .env << EOF
+# Production Environment Configuration
+NEXT_PUBLIC_RPC_URL=$RPC_URL
+NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
+PORT=$EXPLORER_PORT
+NODE_ENV=production
 NEXT_PUBLIC_NETWORK=custom
 NEXT_PUBLIC_NETWORK_NAME=BCFlex Sui Network
 NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
@@ -457,10 +523,10 @@ if pnpm run build; then
     START_CMD="pnpm start"
 elif pnpm run dev 2>/dev/null; then
     echo "✅ Development mode working!"
-    START_CMD="pnpm run dev"
+    START_CMD="pnpm run dev -- --host 0.0.0.0 --port $EXPLORER_PORT"
 else
     echo "⚠️  Build failed, but continuing with development mode"
-    START_CMD="pnpm run dev"
+    START_CMD="pnpm run dev -- --host 0.0.0.0 --port $EXPLORER_PORT"
 fi
 
 echo ""
