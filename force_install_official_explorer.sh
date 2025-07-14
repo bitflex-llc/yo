@@ -406,6 +406,33 @@ fi
 echo ""
 echo "🧪 Testing the explorer..."
 
+# First, ensure port 3000 is free
+echo "🔧 Ensuring port 3000 is available..."
+
+# Kill any existing processes on port 3000
+if command -v lsof >/dev/null 2>&1; then
+    PORT_PIDS=$(lsof -t -i :3000 2>/dev/null | tr '\n' ' ')
+    if [ -n "$PORT_PIDS" ]; then
+        echo "Found processes using port 3000: $PORT_PIDS"
+        echo "Killing existing processes on port 3000..."
+        for pid in $PORT_PIDS; do
+            sudo kill -9 "$pid" 2>/dev/null || true
+        done
+        sleep 3
+    fi
+fi
+
+# Additional cleanup
+sudo pkill -f "node.*3000" 2>/dev/null || true
+sudo pkill -f "next.*dev" 2>/dev/null || true
+sudo pkill -f "npm.*start" 2>/dev/null || true
+sudo fuser -k 3000/tcp 2>/dev/null || true
+
+echo "✅ Port 3000 cleanup completed"
+
+# Wait a moment for port to be freed
+sleep 2
+
 # Start the explorer in background for testing
 echo "Starting explorer with: $START_CMD"
 $START_CMD &
