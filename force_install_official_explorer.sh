@@ -192,26 +192,23 @@ cd "$EXPLORER_DIR/apps/explorer"
 # Dependencies should already be installed by workspace, but ensure they're available
 
 # If it's not a Next.js project, create the basic structure
-if [ ! -f "next.config.js" ]; then
-    echo "🔧 Creating Next.js configuration..."
-    
-    cat > next.config.js << 'EOF'
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  swcMinify: true,
-  output: 'standalone',
-  experimental: {
-    appDir: true
-  },
-  env: {
-    NEXT_PUBLIC_RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://sui.bcflex.com:9001',
-  }
-}
+# DO NOT create custom next.config.js - use the official explorer's configuration
+echo "✅ Using official Sui Explorer Next.js configuration"
 
-module.exports = nextConfig
-EOF
+# Clean up any potentially conflicting custom files from previous installations
+echo "🧹 Cleaning up any conflicting custom files..."
+if [ -f "next.config.custom.js" ]; then
+    echo "Removing custom next.config.js from previous installation..."
+    rm -f next.config.custom.js
+fi
+
+# Remove any custom pages directory that might conflict
+if [ -d "pages" ] && [ ! -f "pages/.official" ]; then
+    echo "⚠️  Found potentially custom pages directory, checking content..."
+    if grep -q "BCFlex" pages/index.js 2>/dev/null || grep -q "custom" pages/index.js 2>/dev/null; then
+        echo "Removing custom pages directory that conflicts with official explorer..."
+        rm -rf pages/
+    fi
 fi
 
 # Create or update Vite configuration to allow sui.bcflex.com host
@@ -257,191 +254,18 @@ EOF
 
 echo "✅ Vite configuration created/updated"
 
-# Create pages directory if it doesn't exist
-if [ ! -d "pages" ] && [ ! -d "app" ] && [ ! -d "src" ]; then
-    echo "🔧 Creating basic Next.js structure..."
-    mkdir -p pages
-    
-    cat > pages/index.js << 'EOF'
-import Head from 'next/head'
-import { useState, useEffect } from 'react'
+echo ""
+echo "� Checking existing project structure..."
+echo "Current directory: $(pwd)"
+echo "Project files:"
+ls -la
 
-export default function Home() {
-  const [systemState, setSystemState] = useState(null)
-  const [chainId, setChainId] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000'
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch chain ID
-        const chainResponse = await fetch('/api/chain-info')
-        if (chainResponse.ok) {
-          const chainData = await chainResponse.json()
-          setChainId(chainData.result)
-        }
-
-        // Fetch system state
-        const systemResponse = await fetch('/api/system-state')
-        if (systemResponse.ok) {
-          const systemData = await systemResponse.json()
-          setSystemState(systemData.result)
-        }
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
-  return (
-    <>
-      <Head>
-        <title>BCFlex Sui Network Explorer</title>
-        <meta name="description" content="BCFlex Sui Blockchain Explorer" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
-      <main style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-        <div style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          minHeight: '100vh',
-          color: 'white',
-          padding: '40px'
-        }}>
-          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-            <h1 style={{ textAlign: 'center', fontSize: '3em', marginBottom: '20px' }}>
-              🌐 BCFlex Sui Explorer
-            </h1>
-            <p style={{ textAlign: 'center', fontSize: '1.2em', marginBottom: '40px' }}>
-              Official Sui Explorer - Custom BCFlex Network
-            </p>
-
-            {loading && <div style={{ textAlign: 'center' }}>Loading...</div>}
-            {error && <div style={{ color: '#ff6b6b', textAlign: 'center' }}>Error: {error}</div>}
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: '20px',
-              marginTop: '30px'
-            }}>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: '15px',
-                padding: '25px',
-                textAlign: 'center'
-              }}>
-                <h3>Chain ID</h3>
-                <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#4facfe' }}>
-                  {chainId || 'Loading...'}
-                </div>
-              </div>
-
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: '15px',
-                padding: '25px',
-                textAlign: 'center'
-              }}>
-                <h3>Current Epoch</h3>
-                <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#4facfe' }}>
-                  {systemState?.epoch || 'Loading...'}
-                </div>
-              </div>
-
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: '15px',
-                padding: '25px',
-                textAlign: 'center'
-              }}>
-                <h3>Active Validators</h3>
-                <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#4facfe' }}>
-                  {systemState?.activeValidators?.length || 'Loading...'}
-                </div>
-              </div>
-            </div>
-
-            <div style={{
-              background: 'rgba(0, 255, 127, 0.2)',
-              borderLeft: '4px solid #00ff7f',
-              padding: '15px',
-              margin: '20px 0',
-              borderRadius: '5px'
-            }}>
-              <h3>💡 BCFlex Network Features</h3>
-              <ul>
-                <li><strong>Delegators:</strong> 1% daily rewards (365% APY)</li>
-                <li><strong>Validators:</strong> 1.5% daily rewards (547% APY)</li>
-                <li><strong>RPC Endpoint:</strong> {rpcUrl}</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </main>
-    </>
-  )
-}
-EOF
-
-    # Create API routes
-    mkdir -p pages/api
-    
-    cat > pages/api/chain-info.js << 'EOF'
-export default async function handler(req, res) {
-  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000'
-  
-  try {
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'sui_getChainIdentifier',
-        params: [],
-        id: 1
-      })
-    })
-    
-    const data = await response.json()
-    res.status(200).json(data)
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch chain info', details: error.message })
-  }
-}
-EOF
-
-    cat > pages/api/system-state.js << 'EOF'
-export default async function handler(req, res) {
-  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000'
-  
-  try {
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'sui_getLatestSuiSystemState',
-        params: [],
-        id: 1
-      })
-    })
-    
-    const data = await response.json()
-    res.status(200).json(data)
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch system state', details: error.message })
-  }
-}
-EOF
+# Check if this is already a proper React/Next.js project
+if [ -f "src/pages/index.tsx" ] || [ -f "src/app/page.tsx" ] || [ -f "pages/index.tsx" ]; then
+    echo "✅ Official Sui Explorer structure detected"
+    echo "Skipping custom page creation - using official structure"
+else
+    echo "⚠️  Official structure not found, explorer might need build"
 fi
 
 # Create environment configuration

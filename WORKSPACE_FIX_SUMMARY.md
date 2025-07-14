@@ -66,6 +66,19 @@ Should now complete without workspace dependency errors.
 
 ---
 
+# Workspace Dependencies Fix Summary
+
+## Critical Changes Made
+
+### 1. Removed All Custom Structure Creation
+- **REMOVED**: Custom Next.js pages creation that was breaking official explorer
+- **REMOVED**: Custom `next.config.js` creation that was conflicting with official config
+- **KEPT**: Only environment files (.env.local, .env) and Vite config for host allowlist
+
+### 2. Switched to pnpm for Workspace Dependencies
+- All workspace dependency installations now use `pnpm` commands
+- Ensures compatibility with official Sui Explorer monorepo setup
+
 **Status**: ✅ Workspace dependency issue resolved  
 **Package Manager**: pnpm (required)  
 **Build Location**: /root/sui-explorer/apps/explorer  
