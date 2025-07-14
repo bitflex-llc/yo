@@ -11,47 +11,22 @@ EXPLORER_PORT="3011"
 
 echo "🔍 DEBUG SUI EXPLORER - Official Explorer Only (Port 3011)"
 
-# Standalone explorer setup function
-setup_standalone_explorer() {
-    echo "📥 Setting up standalone Sui Explorer..."
+# Force install official explorer function
+force_official_explorer() {
+    echo "� FORCING Official Sui Explorer Installation..."
+    echo "No fallbacks - official explorer only!"
     
-    # Create a simple standalone explorer
-    mkdir -p "$EXPLORER_DIR"
-    cd "$EXPLORER_DIR"
-    
-    # Initialize npm project
-    cat > package.json << 'EOF'
-{
-  "name": "sui-explorer-standalone",
-  "version": "1.0.0",
-  "description": "Simple Sui blockchain explorer for BCFlex Network",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.0",
-    "cors": "^2.8.5"
-  }
+    # Run the force install script
+    if [ -f "./force_install_official_explorer.sh" ]; then
+        echo "📄 Running force install script..."
+        chmod +x ./force_install_official_explorer.sh
+        ./force_install_official_explorer.sh
+    else
+        echo "❌ force_install_official_explorer.sh not found"
+        echo "💡 Please ensure you're in the correct directory"
+        exit 1
+    fi
 }
-EOF
-    
-    # Install dependencies
-    echo "📦 Installing explorer dependencies..."
-    npm install
-    
-    # Create simple web explorer server
-    cat > server.js << 'SERVEREOF'
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const path = require('path');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://sui.bcflex.com:9000';
 
 app.use(cors());
 app.use(express.json());
