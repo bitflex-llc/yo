@@ -94,8 +94,42 @@ setup_explorer() {
     echo "📥 Cloning Sui Explorer repository..."
     git clone https://github.com/MystenLabs/sui.git "$EXPLORER_DIR"
     
+    # Find the correct explorer directory
+    ACTUAL_EXPLORER_DIR=""
+    for dir in "$EXPLORER_DIR/apps/explorer" "$EXPLORER_DIR/apps/wallet" "$EXPLORER_DIR/explorer" "$EXPLORER_DIR/dapps/sui-explorer"; do
+        if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
+            ACTUAL_EXPLORER_DIR="$dir"
+            echo "✅ Found explorer at: $ACTUAL_EXPLORER_DIR"
+            break
+        fi
+    done
+    
+    if [ -z "$ACTUAL_EXPLORER_DIR" ]; then
+        echo "❌ Explorer directory not found in repository"
+        echo "📋 Available directories:"
+        find "$EXPLORER_DIR" -name "package.json" -type f | head -10
+        echo ""
+        echo "💡 Let's try using a standalone explorer instead..."
+        
+        # Remove the cloned sui repo
+        rm -rf "$EXPLORER_DIR"
+        
+        # Use a standalone explorer
+        setup_standalone_explorer
+        return
+    fi
+    
     # Navigate to explorer directory
-    cd "$EXPLORER_DIR/apps/explorer"
+    cd "$ACTUAL_EXPLORER_DIR"
+    
+    # Check if it's a Next.js app
+    if ! grep -q "next" package.json 2>/dev/null; then
+        echo "⚠️  This doesn't appear to be the web explorer"
+        echo "💡 Trying standalone explorer instead..."
+        rm -rf "$EXPLORER_DIR"
+        setup_standalone_explorer
+        return
+    fi
     
     # Install dependencies
     echo "📦 Installing explorer dependencies..."
@@ -115,7 +149,333 @@ EOF
     echo "🔨 Building the explorer..."
     npm run build
     
+    # Update the global explorer directory variable
+    EXPLORER_DIR="$ACTUAL_EXPLORER_DIR"
+    
     echo "✅ Explorer setup completed"
+}
+
+# Setup standalone explorer (fallback)
+setup_standalone_explorer() {
+    echo "📥 Setting up standalone Sui Explorer..."
+    
+    # Create a simple standalone explorer
+    mkdir -p "$EXPLORER_DIR"
+    cd "$EXPLORER_DIR"
+    
+    # Initialize npm project
+    cat > package.json << 'EOF'
+{
+  "name": "sui-explorer-standalone",
+  "version": "1.0.0",
+  "description": "Simple Sui blockchain explorer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5"
+  }
+}
+EOF
+    
+    # Install dependencies
+    echo "📦 Installing explorer dependencies..."
+    npm install
+    
+    # Create simple web explorer
+    cat > server.js << 'EOF'
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:9000';
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+// API endpoint to get latest system state
+app.get('/api/system-state', async (req, res) => {
+    try {
+        const response = await axios.post(RPC_URL, {
+            jsonrpc: '2.0',
+            method: 'sui_getLatestSuiSystemState',
+            params: [],
+            id: 1
+        });
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch system state' });
+    }
+});
+
+// API endpoint to get chain identifier
+app.get('/api/chain-info', async (req, res) => {
+    try {
+        const response = await axios.post(RPC_URL, {
+            jsonrpc: '2.0',
+            method: 'sui_getChainIdentifier',
+            params: [],
+            id: 1
+        });
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch chain info' });
+    }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// Serve main page
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sui Explorer running on port ${PORT}`);
+    console.log(`RPC URL: ${RPC_URL}`);
+});
+EOF
+    
+    # Create public directory and HTML file
+    mkdir -p public
+    cat > public/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sui Blockchain Explorer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .stat {
+            text-align: center;
+            padding: 20px;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4facfe;
+        }
+        .stat-label {
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+        .btn {
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .info-box {
+            background: rgba(0, 255, 127, 0.2);
+            border-left: 4px solid #00ff7f;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        #status {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading {
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">⚡ Sui Explorer</div>
+            <p>Custom Sui Blockchain Network Explorer</p>
+        </div>
+
+        <div id="status">
+            <button class="btn" onclick="refreshData()">🔄 Refresh Data</button>
+        </div>
+
+        <div class="info-box">
+            <strong>🎯 Custom Network Features:</strong><br>
+            • 1% daily rewards for delegators<br>
+            • 1.5% daily rewards for validators<br>
+            • Local development network
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="stat">
+                    <div class="stat-number" id="chainId">Loading...</div>
+                    <div class="stat-label">Chain ID</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="stat">
+                    <div class="stat-number" id="epoch">Loading...</div>
+                    <div class="stat-label">Current Epoch</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="stat">
+                    <div class="stat-number" id="validators">Loading...</div>
+                    <div class="stat-label">Active Validators</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🔗 Network Endpoints</h3>
+            <p><strong>RPC:</strong> http://localhost:9000</p>
+            <p><strong>WebSocket:</strong> ws://localhost:9001</p>
+            <p><strong>Faucet:</strong> http://localhost:5003</p>
+            <p><strong>Metrics:</strong> http://localhost:9184</p>
+        </div>
+
+        <div class="card">
+            <h3>🧪 Quick Tests</h3>
+            <button class="btn" onclick="testRPC()">Test RPC Connection</button>
+            <button class="btn" onclick="testFaucet()">Test Faucet</button>
+            <div id="testResults" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            try {
+                // Fetch chain info
+                const chainResponse = await fetch('/api/chain-info');
+                const chainData = await chainResponse.json();
+                if (chainData.result) {
+                    document.getElementById('chainId').textContent = chainData.result;
+                }
+
+                // Fetch system state
+                const systemResponse = await fetch('/api/system-state');
+                const systemData = await systemResponse.json();
+                if (systemData.result) {
+                    const state = systemData.result;
+                    document.getElementById('epoch').textContent = state.epoch || 'N/A';
+                    document.getElementById('validators').textContent = 
+                        state.activeValidators ? state.activeValidators.length : 'N/A';
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('chainId').textContent = 'Error';
+                document.getElementById('epoch').textContent = 'Error';
+                document.getElementById('validators').textContent = 'Error';
+            }
+        }
+
+        function refreshData() {
+            document.querySelector('.container').classList.add('loading');
+            fetchData().finally(() => {
+                document.querySelector('.container').classList.remove('loading');
+            });
+        }
+
+        async function testRPC() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = 'Testing RPC...';
+            
+            try {
+                const response = await fetch('/api/system-state');
+                const data = await response.json();
+                if (data.result) {
+                    results.innerHTML = '<span style="color: #00ff7f;">✅ RPC Connection: OK</span>';
+                } else {
+                    results.innerHTML = '<span style="color: #ff6b6b;">❌ RPC Connection: Failed</span>';
+                }
+            } catch (error) {
+                results.innerHTML = '<span style="color: #ff6b6b;">❌ RPC Connection: Error</span>';
+            }
+        }
+
+        async function testFaucet() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = 'Testing Faucet...';
+            
+            try {
+                const response = await fetch('http://localhost:5003');
+                if (response.ok) {
+                    results.innerHTML = '<span style="color: #00ff7f;">✅ Faucet: Available</span>';
+                } else {
+                    results.innerHTML = '<span style="color: #ff6b6b;">❌ Faucet: Not responding</span>';
+                }
+            } catch (error) {
+                results.innerHTML = '<span style="color: #ff6b6b;">❌ Faucet: Not available</span>';
+            }
+        }
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', fetchData);
+        
+        // Auto-refresh every 30 seconds
+        setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>
+EOF
+    
+    echo "✅ Standalone explorer setup completed"
 }
 
 # Create systemd service for explorer
@@ -131,7 +491,7 @@ Wants=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=$EXPLORER_DIR/apps/explorer
+WorkingDirectory=$EXPLORER_DIR
 Environment=NODE_ENV=production
 Environment=PORT=$EXPLORER_PORT
 Environment=NEXT_PUBLIC_RPC_URL=http://localhost:9000
