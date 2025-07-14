@@ -750,8 +750,6 @@ if [ "$EXPLORER_AVAILABLE" = true ]; then
     systemctl status sui-explorer --no-pager -l
 fi
 EOF
-systemctl status sui-explorer --no-pager -l
-EOF
 
     # Stop script
     cat > $SUI_CONFIG_DIR/stop_sui_network.sh << 'EOF'
