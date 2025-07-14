@@ -7,8 +7,9 @@ set -eu
 
 EXPLORER_DIR="/root/sui-explorer"
 RPC_URL="http://sui.bcflex.com:9000"
+EXPLORER_PORT="3011"
 
-echo "🔧 Force Installing Official Sui Block Explorer"
+echo "🔧 Force Installing Official Sui Block Explorer on Port 3011"
 echo "=============================================="
 
 # Check if running as root
@@ -372,7 +373,7 @@ cat > .env.local << EOF
 # Sui Explorer Configuration
 NEXT_PUBLIC_RPC_URL=$RPC_URL
 NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
-PORT=3000
+PORT=$EXPLORER_PORT
 NODE_ENV=production
 
 # Custom network configuration
@@ -382,6 +383,30 @@ NEXT_PUBLIC_API_ENDPOINT=$RPC_URL
 EOF
 
 echo "✅ Environment configuration created"
+
+# Kill any processes using the explorer port
+echo ""
+echo "🧹 Checking for processes on port $EXPLORER_PORT..."
+if command -v lsof > /dev/null; then
+    PROCESSES=$(lsof -ti:$EXPLORER_PORT 2>/dev/null || true)
+    if [ -n "$PROCESSES" ]; then
+        echo "Killing processes on port $EXPLORER_PORT: $PROCESSES"
+        for PID in $PROCESSES; do
+            kill -9 "$PID" 2>/dev/null || true
+        done
+        sleep 2
+    else
+        echo "No processes found on port $EXPLORER_PORT"
+    fi
+else
+    echo "lsof not available, trying alternative method..."
+    netstat -tlnp 2>/dev/null | grep :$EXPLORER_PORT | awk '{print $7}' | cut -d'/' -f1 | while read PID; do
+        if [ -n "$PID" ] && [ "$PID" != "-" ]; then
+            echo "Killing process $PID on port $EXPLORER_PORT"
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    done
+fi
 
 # Verify the updated package.json
 echo ""
@@ -406,15 +431,15 @@ fi
 echo ""
 echo "🧪 Testing the explorer..."
 
-# First, ensure port 3000 is free
-echo "🔧 Ensuring port 3000 is available..."
+# First, ensure port 3011 is free
+echo "🔧 Ensuring port 3011 is available..."
 
-# Kill any existing processes on port 3000
+# Kill any existing processes on port 3011
 if command -v lsof >/dev/null 2>&1; then
-    PORT_PIDS=$(lsof -t -i :3000 2>/dev/null | tr '\n' ' ')
+    PORT_PIDS=$(lsof -t -i :3011 2>/dev/null | tr '\n' ' ')
     if [ -n "$PORT_PIDS" ]; then
-        echo "Found processes using port 3000: $PORT_PIDS"
-        echo "Killing existing processes on port 3000..."
+        echo "Found processes using port 3011: $PORT_PIDS"
+        echo "Killing existing processes on port 3011..."
         for pid in $PORT_PIDS; do
             sudo kill -9 "$pid" 2>/dev/null || true
         done
@@ -422,20 +447,20 @@ if command -v lsof >/dev/null 2>&1; then
     fi
 fi
 
-# Additional cleanup
-sudo pkill -f "node.*3000" 2>/dev/null || true
-sudo pkill -f "next.*dev" 2>/dev/null || true
-sudo pkill -f "npm.*start" 2>/dev/null || true
-sudo fuser -k 3000/tcp 2>/dev/null || true
+# Additional cleanup for port 3011
+sudo pkill -f "node.*3011" 2>/dev/null || true
+sudo pkill -f "next.*dev.*3011" 2>/dev/null || true
+sudo pkill -f "npm.*start.*3011" 2>/dev/null || true
+sudo fuser -k 3011/tcp 2>/dev/null || true
 
-echo "✅ Port 3000 cleanup completed"
+echo "✅ Port 3011 cleanup completed"
 
 # Wait a moment for port to be freed
 sleep 2
 
 # Start the explorer in background for testing
-echo "Starting explorer with: $START_CMD"
-$START_CMD &
+echo "Starting explorer with: PORT=3011 $START_CMD"
+PORT=3011 $START_CMD &
 EXPLORER_PID=$!
 
 echo "Explorer started with PID: $EXPLORER_PID"
@@ -443,11 +468,11 @@ echo "⏳ Waiting 20 seconds for explorer to initialize..."
 sleep 20
 
 # Test if it's working
-if curl -s http://localhost:3000 >/dev/null 2>&1; then
-    echo "✅ Explorer is responding on port 3000!"
+if curl -s http://localhost:3011 >/dev/null 2>&1; then
+    echo "✅ Explorer is responding on port 3011!"
     echo ""
     echo "🌐 Testing homepage:"
-    curl -I http://localhost:3000 2>/dev/null | head -3
+    curl -I http://localhost:3011 2>/dev/null | head -3
     
     echo ""
     echo "🎉 SUCCESS! Official Sui Explorer is running!"
@@ -456,7 +481,7 @@ if curl -s http://localhost:3000 >/dev/null 2>&1; then
     kill $EXPLORER_PID 2>/dev/null || true
     
 else
-    echo "❌ Explorer not responding on port 3000"
+    echo "❌ Explorer not responding on port 3011"
     echo "Process status:"
     if kill -0 $EXPLORER_PID 2>/dev/null; then
         echo "Process is running but not responding"
@@ -473,8 +498,8 @@ else
     ps aux | grep npm || echo "No npm processes found"
     
     echo ""
-    echo "Port 3000 usage:"
-    netstat -tulpn | grep :3000 || echo "Port 3000 not in use"
+    echo "Port 3011 usage:"
+    netstat -tulpn | grep :3011 || echo "Port 3011 not in use"
 fi
 
 echo ""
@@ -491,7 +516,7 @@ Type=simple
 User=root
 WorkingDirectory=$EXPLORER_DIR
 Environment=NODE_ENV=production
-Environment=PORT=3000
+Environment=PORT=$EXPLORER_PORT
 Environment=NEXT_PUBLIC_RPC_URL=$RPC_URL
 Environment=NEXT_PUBLIC_WS_URL=ws://sui.bcflex.com:9001
 Environment=NEXT_PUBLIC_NETWORK=custom
@@ -539,5 +564,5 @@ echo "   cd $EXPLORER_DIR"
 echo "   $START_CMD"
 echo ""
 echo "🌐 Explorer will be available at:"
-echo "   http://localhost:3000"
+echo "   http://localhost:$EXPLORER_PORT"
 echo "   https://sui.bcflex.com (with nginx proxy)"

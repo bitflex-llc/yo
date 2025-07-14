@@ -1,11 +1,15 @@
-#!/bin/bash
+#!/bin/sh
 
-# Quick script to debug and fix Sui Explorer setup issues
+# Debug script for Sui Explorer - OFFICIAL EXPLORER ONLY on Port 3011
+# This script forces the use of the official explorer and removes fallback logic
 
 set -eu
 
 EXPLORER_DIR="/root/sui-explorer"
 RPC_URL="http://sui.bcflex.com:9000"
+EXPLORER_PORT="3011"
+
+echo "🔍 DEBUG SUI EXPLORER - Official Explorer Only (Port 3011)"
 
 # Standalone explorer setup function
 setup_standalone_explorer() {
